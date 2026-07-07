@@ -16,6 +16,10 @@ export async function getAddresses(): Promise<Address[]> {
   return request.get('/users/addresses')
 }
 
+export async function getDefaultAddress(): Promise<Address | null> {
+  return request.get('/users/addresses/default')
+}
+
 export async function addAddress(data: {
   name: string
   phone: string

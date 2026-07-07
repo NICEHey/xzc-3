@@ -5,6 +5,7 @@ import {
   uploadAvatar,
   addAddress,
   getAddresses,
+  getDefaultAddress,
   updateAddress,
   deleteAddress,
   setDefaultAddress,
@@ -21,6 +22,7 @@ router.post('/avatar', authMiddleware, upload.single('avatar'), uploadAvatar)
 
 router.post('/addresses', authMiddleware, addAddress)
 router.get('/addresses', authMiddleware, getAddresses)
+router.get('/addresses/default', authMiddleware, getDefaultAddress)
 router.put('/addresses/:id', authMiddleware, updateAddress)
 router.delete('/addresses/:id', authMiddleware, deleteAddress)
 router.put('/addresses/:id/default', authMiddleware, setDefaultAddress)

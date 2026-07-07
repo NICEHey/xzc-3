@@ -109,6 +109,65 @@
             </div>
           </div>
 
+          <div class="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-gray-700 font-medium">收货地址</span>
+              <router-link to="/addresses" class="text-sm text-green-600 hover:underline">管理地址</router-link>
+            </div>
+            
+            <div v-if="addresses.length === 0" class="text-gray-500">
+              <p>暂无收货地址，请先添加</p>
+              <router-link to="/addresses" class="inline-block mt-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                添加地址
+              </router-link>
+            </div>
+            
+            <div v-else class="space-y-2">
+              <div
+                v-for="address in addresses"
+                :key="address.id"
+                @click="selectedAddressId = address.id"
+                :class="[
+                  'p-3 rounded-lg border cursor-pointer transition-colors',
+                  selectedAddressId === address.id 
+                    ? 'border-green-500 bg-green-50' 
+                    : 'border-gray-200 hover:border-green-300'
+                ]"
+              >
+                <div class="flex items-start justify-between">
+                  <div class="flex-1">
+                    <div class="flex items-center space-x-3 mb-1">
+                      <span class="font-medium text-gray-800">{{ address.name }}</span>
+                      <span class="text-gray-500">{{ address.phone }}</span>
+                      <span
+                        v-if="address.isDefault"
+                        class="px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full"
+                      >
+                        默认
+                      </span>
+                    </div>
+                    <p class="text-sm text-gray-600">
+                      {{ address.province }} {{ address.city }} {{ address.district }} {{ address.detail }}
+                    </p>
+                  </div>
+                  <div
+                    :class="[
+                      'w-5 h-5 rounded-full border-2 flex items-center justify-center',
+                      selectedAddressId === address.id 
+                        ? 'border-green-500' 
+                        : 'border-gray-300'
+                    ]"
+                  >
+                    <div
+                      v-if="selectedAddressId === address.id"
+                      class="w-3 h-3 bg-green-500 rounded-full"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div v-if="userInfo" class="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
             <div class="flex items-center justify-between mb-2">
               <span class="text-gray-600">当前积分：</span>
@@ -179,6 +238,8 @@ import { getAddresses, type Address } from '../api/addresses'
 const router = useRouter()
 const cartItems = ref<CartItem[]>([])
 const pointUsed = ref(0)
+const addresses = ref<Address[]>([])
+const selectedAddressId = ref<number | null>(null)
 
 const userInfo = computed(() => {
   const user = localStorage.getItem('user')
@@ -229,6 +290,20 @@ async function loadCart() {
   }
 }
 
+async function loadAddresses() {
+  try {
+    addresses.value = await getAddresses()
+    const defaultAddr = addresses.value.find(a => a.isDefault)
+    if (defaultAddr) {
+      selectedAddressId.value = defaultAddr.id
+    } else if (addresses.value.length > 0) {
+      selectedAddressId.value = addresses.value[0].id
+    }
+  } catch (error) {
+    console.error('加载地址失败:', error)
+  }
+}
+
 async function handleUpdateQuantity(id: number, quantity: number) {
   if (quantity < 1) {
     await handleDeleteItem(id)
@@ -265,16 +340,14 @@ async function handleClearCart() {
 
 async function handleCheckout() {
   try {
-    const addresses: Address[] = await getAddresses()
-    const defaultAddress = addresses.find((a: Address) => a.isDefault) || addresses[0]
-    
-    if (!defaultAddress) {
+    if (!selectedAddressId.value) {
       alert('请先添加收货地址')
+      router.push('/addresses')
       return
     }
 
     await createOrder({
-      addressId: defaultAddress.id,
+      addressId: selectedAddressId.value,
       useCart: true,
       pointUsed: pointUsed.value || undefined
     })
@@ -295,5 +368,6 @@ function handleLogout() {
 
 onMounted(() => {
   loadCart()
+  loadAddresses()
 })
 </script>

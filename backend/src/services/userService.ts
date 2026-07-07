@@ -157,6 +157,14 @@ export async function getUserAddresses(userId: number) {
   return addresses
 }
 
+export async function getDefaultAddress(userId: number) {
+  const address = await prisma.userAddress.findFirst({
+    where: { userId, isDefault: true }
+  })
+
+  return address
+}
+
 export async function updateUserAddress(userId: number, addressId: number, input: Partial<UserAddressInput>) {
   const transaction = await prisma.$transaction(async (tx) => {
     if (input.isDefault) {
@@ -178,11 +186,23 @@ export async function updateUserAddress(userId: number, addressId: number, input
 }
 
 export async function deleteUserAddress(userId: number, addressId: number) {
-  const address = await prisma.userAddress.delete({
+  const address = await prisma.userAddress.findUnique({
     where: { id: addressId, userId }
   })
 
-  return address
+  if (!address) {
+    throw new Error('地址不存在')
+  }
+
+  if (address.isDefault) {
+    throw new Error('不能删除默认地址，请先设置其他地址为默认地址')
+  }
+
+  const deleted = await prisma.userAddress.delete({
+    where: { id: addressId, userId }
+  })
+
+  return deleted
 }
 
 export async function getUserPointLogs(userId: number, page: number = 1, pageSize: number = 20) {

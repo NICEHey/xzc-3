@@ -97,6 +97,20 @@ export async function getAddresses(req: Request, res: Response) {
   }
 }
 
+export async function getDefaultAddress(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId
+    if (!userId) {
+      return error(res, '用户ID不存在', 400)
+    }
+
+    const address = await userService.getDefaultAddress(userId)
+    success(res, address)
+  } catch (err: any) {
+    error(res, err.message)
+  }
+}
+
 export async function updateAddress(req: Request, res: Response) {
   try {
     const userId = req.user?.userId
