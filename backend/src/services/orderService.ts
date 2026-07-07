@@ -1,0 +1,380 @@
+import prisma from '../utils/prisma'
+import { OrderCreateInput } from '../types'
+import { generateOrderNo, calculateDiscount, calculatePoints, pointsToAmount } from '../utils/utils'
+import * as userService from './userService'
+import * as deliveryService from './deliveryService'
+
+export async function createOrder(userId: number, input: OrderCreateInput) {
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user) {
+    throw new Error('用户不存在')
+  }
+
+  const address = await prisma.userAddress.findUnique({ where: { id: input.addressId, userId } })
+  if (!address) {
+    throw new Error('收货地址不存在')
+  }
+
+  const items: any[] = []
+  let totalAmount = 0
+
+  for (const item of input.items) {
+    const product = await prisma.product.findUnique({ where: { id: item.productId } })
+    if (!product || product.status !== 'ON_SALE') {
+      throw new Error(`商品 ${item.productId} 不存在或已下架`)
+    }
+
+    if (product.stock < item.quantity) {
+      throw new Error(`商品 ${product.name} 库存不足`)
+    }
+
+    const price = user.level === 'VIP' ? product.vipPrice : product.salePrice
+    const itemTotal = Number(price) * item.quantity
+
+    items.push({
+      productId: product.id,
+      name: product.name,
+      price: price,
+      quantity: item.quantity,
+      image: product.image
+    })
+
+    totalAmount += itemTotal
+  }
+
+  const discountAmount = calculateDiscount(totalAmount, user.level)
+  const maxPoints = Math.floor(totalAmount * 100)
+  const pointUsed = Math.min(input.pointUsed || 0, maxPoints, user.points)
+  const pointsDiscount = pointsToAmount(pointUsed)
+  const payAmount = Math.max(0, totalAmount - discountAmount - pointsDiscount)
+
+  const orderNo = generateOrderNo()
+
+  const transaction = await prisma.$transaction(async (tx) => {
+    for (const item of input.items) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { stock: { decrement: item.quantity } }
+      })
+    }
+
+    const order = await tx.order.create({
+      data: {
+        orderNo,
+        userId,
+        addressId: input.addressId,
+        totalAmount: totalAmount,
+        discountAmount: discountAmount,
+        pointUsed,
+        payAmount: payAmount
+      }
+    })
+
+    await tx.orderItem.createMany({
+      data: items.map(item => ({
+        orderId: order.id,
+        ...item
+      }))
+    })
+
+    if (pointUsed > 0) {
+      await userService.addPoints(userId, -pointUsed, '订单抵扣', order.id)
+    }
+
+    return order
+  })
+
+  return await getOrderById(transaction.id)
+}
+
+export async function getOrders(userId?: number, page: number = 1, pageSize: number = 20, status?: string) {
+  const skip = (page - 1) * pageSize
+
+  const where: any = {}
+  if (userId) where.userId = userId
+  if (status) where.status = status
+
+  const orders = await prisma.order.findMany({
+    where,
+    include: {
+      items: true,
+      address: true,
+      delivery: { select: { name: true, phone: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    skip,
+    take: pageSize
+  })
+
+  const total = await prisma.order.count({ where })
+
+  return { orders, total, page, pageSize }
+}
+
+export async function getOrderById(id: number) {
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      address: true,
+      delivery: { select: { name: true, phone: true } },
+      evaluation: true,
+      deliveryTraces: { orderBy: { createdAt: 'asc' } }
+    }
+  })
+
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  return order
+}
+
+export async function getOrderByNo(orderNo: string) {
+  const order = await prisma.order.findUnique({
+    where: { orderNo },
+    include: {
+      items: true,
+      address: true,
+      delivery: { select: { name: true, phone: true } },
+      evaluation: true,
+      deliveryTraces: { orderBy: { createdAt: 'asc' } }
+    }
+  })
+
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  return order
+}
+
+export async function payOrder(orderNo: string) {
+  const order = await prisma.order.findUnique({ where: { orderNo } })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (order.status !== 'PENDING_PAY') {
+    throw new Error('订单状态不允许支付')
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { orderNo },
+    data: {
+      status: 'PAID',
+      payTime: new Date()
+    }
+  })
+
+  const points = calculatePoints(Number(order.payAmount))
+  await userService.addPoints(order.userId, points, '订单支付奖励', order.id)
+
+  await deliveryService.autoAssignDelivery(order.id)
+
+  return await getOrderByNo(orderNo)
+}
+
+export async function cancelOrder(orderNo: string, userId?: number) {
+  const order = await prisma.order.findUnique({ 
+    where: { orderNo },
+    include: { items: true }
+  })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (userId && order.userId !== userId) {
+    throw new Error('无权操作该订单')
+  }
+
+  if (order.status === 'COMPLETED' || order.status === 'REFUNDED') {
+    throw new Error('订单已完成或已退款，无法取消')
+  }
+
+  if (order.status === 'DELIVERING') {
+    throw new Error('订单配送中，无法取消')
+  }
+
+  const transaction = await prisma.$transaction(async (tx) => {
+    if (order.status === 'PAID' || order.status === 'PENDING_DELIVERY') {
+      await tx.order.update({
+        where: { orderNo },
+        data: {
+          status: 'CANCELLED',
+          cancelTime: new Date(),
+          refundAmount: order.payAmount,
+          refundTime: new Date()
+        }
+      })
+
+      if (order.pointUsed > 0) {
+        await userService.addPoints(order.userId, order.pointUsed, '订单取消返还积分', order.id)
+      }
+    } else {
+      await tx.order.update({
+        where: { orderNo },
+        data: {
+          status: 'CANCELLED',
+          cancelTime: new Date()
+        }
+      })
+    }
+
+    for (const item of order.items) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { stock: { increment: item.quantity } }
+      })
+    }
+  })
+
+  return await getOrderByNo(orderNo)
+}
+
+export async function refundOrder(orderNo: string) {
+  const order = await prisma.order.findUnique({ 
+    where: { orderNo },
+    include: { items: true }
+  })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (order.status !== 'PAID' && order.status !== 'PENDING_DELIVERY') {
+    throw new Error('订单状态不允许退款')
+  }
+
+  const refundAmount = Number(order.payAmount) - Number(order.refundAmount)
+
+  const updatedOrder = await prisma.order.update({
+    where: { orderNo },
+    data: {
+      status: 'REFUNDED',
+      refundAmount: order.payAmount,
+      refundTime: new Date()
+    }
+  })
+
+  if (order.pointUsed > 0) {
+    await userService.addPoints(order.userId, order.pointUsed, '订单退款返还积分', order.id)
+  }
+
+  for (const item of order.items) {
+    await prisma.product.update({
+      where: { id: item.productId },
+      data: { stock: { increment: item.quantity } }
+    })
+  }
+
+  return await getOrderByNo(orderNo)
+}
+
+export async function deliverOrder(orderNo: string) {
+  const order = await prisma.order.findUnique({ where: { orderNo } })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (order.status !== 'PENDING_DELIVERY') {
+    throw new Error('订单状态不允许配送')
+  }
+
+  if (!order.deliveryId) {
+    throw new Error('配送员未分配')
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { orderNo },
+    data: {
+      status: 'DELIVERING',
+      deliveryTime: new Date()
+    }
+  })
+
+  await deliveryService.addDeliveryTrace(order.id, order.deliveryId, 39.9042, 116.4074, 'DELIVERING', '配送员已取货，正在配送中')
+
+  return await getOrderByNo(orderNo)
+}
+
+export async function completeOrder(orderNo: string) {
+  const order = await prisma.order.findUnique({ where: { orderNo } })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (order.status !== 'DELIVERING') {
+    throw new Error('订单状态不允许完成')
+  }
+
+  const transaction = await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { orderNo },
+      data: {
+        status: 'COMPLETED',
+        completeTime: new Date()
+      }
+    })
+
+    if (order.deliveryId) {
+      await tx.deliveryStaff.update({
+        where: { id: order.deliveryId },
+        data: {
+          completedOrders: { increment: 1 }
+        }
+      })
+    }
+  })
+
+  return await getOrderByNo(orderNo)
+}
+
+export async function createEvaluation(orderId: number, userId: number, score: number, content: string = '', images: string[] = []) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) {
+    throw new Error('订单不存在')
+  }
+
+  if (order.userId !== userId) {
+    throw new Error('无权评价该订单')
+  }
+
+  if (order.status !== 'COMPLETED') {
+    throw new Error('订单未完成，无法评价')
+  }
+
+  const existingEval = await prisma.evaluation.findUnique({ where: { orderId } })
+  if (existingEval) {
+    throw new Error('该订单已评价')
+  }
+
+  const evaluation = await prisma.evaluation.create({
+    data: {
+      orderId,
+      userId,
+      score,
+      content,
+      images: JSON.stringify(images)
+    }
+  })
+
+  return evaluation
+}
+
+export async function getEvaluations(page: number = 1, pageSize: number = 20) {
+  const skip = (page - 1) * pageSize
+
+  const evaluations = await prisma.evaluation.findMany({
+    include: {
+      order: { include: { items: { select: { name: true, image: true } } } },
+      user: { select: { nickname: true, avatar: true } }
+    },
+    orderBy: { createdAt: 'desc' },
+    skip,
+    take: pageSize
+  })
+
+  const total = await prisma.evaluation.count()
+
+  return { evaluations, total, page, pageSize }
+}

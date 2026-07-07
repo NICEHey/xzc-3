@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fresh-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: fresh_delivery
+      MYSQL_USER: fresh_user
+      MYSQL_PASSWORD: fresh_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/prisma/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - fresh-network
+
+  backend:
+    build: ./backend
+    container_name: fresh-backend
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: mysql://fresh_user:fresh_password@mysql:3306/fresh_delivery
+      JWT_SECRET: fresh_delivery_jwt_secret_key_2024
+      PORT: 3000
+      NODE_ENV: production
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    networks:
+      - fresh-network
+
+volumes:
+  mysql_data:
+
+networks:
+  fresh-network:
+    driver: bridge

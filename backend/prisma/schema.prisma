@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            Int           @id @default(autoincrement())
+  phone         String        @unique
+  password      String
+  nickname      String        @default("")
+  avatar        String        @default("")
+  level         UserLevel     @default(USER)
+  points        Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  addresses     UserAddress[]
+  orders        Order[]
+  evaluations   Evaluation[]
+  pointLogs     PointLog[]
+
+  @@map("users")
+}
+
+enum UserLevel {
+  USER
+  VIP
+}
+
+model UserAddress {
+  id          Int     @id @default(autoincrement())
+  userId      Int
+  name        String
+  phone       String
+  province    String
+  city        String
+  district    String
+  detail      String
+  isDefault   Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders      Order[]
+
+  @@map("user_addresses")
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  icon        String    @default("")
+  sort        Int       @default(0)
+  status      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id              Int           @id @default(autoincrement())
+  categoryId      Int
+  name            String
+  description     String        @default("")
+  originalPrice   Decimal       @db.Decimal(10, 2)
+  salePrice       Decimal       @db.Decimal(10, 2)
+  vipPrice        Decimal       @db.Decimal(10, 2)
+  stock           Int           @default(0)
+  minStock        Int           @default(10)
+  image           String        @default("")
+  unit            String        @default("")
+  status          ProductStatus @default(ON_SALE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  category        Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
+
+  @@map("products")
+}
+
+enum ProductStatus {
+  ON_SALE
+  OFF_SALE
+}
+
+model Order {
+  id              Int           @id @default(autoincrement())
+  orderNo         String        @unique
+  userId          Int
+  addressId       Int
+  deliveryId      Int?
+  totalAmount     Decimal       @db.Decimal(10, 2)
+  discountAmount  Decimal       @db.Decimal(10, 2) @default(0)
+  pointUsed       Int           @default(0)
+  payAmount       Decimal       @db.Decimal(10, 2)
+  status          OrderStatus   @default(PENDING_PAY)
+  payTime         DateTime?
+  deliveryTime    DateTime?
+  completeTime    DateTime?
+  cancelTime      DateTime?
+  refundAmount    Decimal       @db.Decimal(10, 2) @default(0)
+  refundTime      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address         UserAddress   @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  delivery        DeliveryStaff? @relation(fields: [deliveryId], references: [id])
+  items           OrderItem[]
+  evaluation      Evaluation?
+  deliveryTraces  DeliveryTrace[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING_PAY
+  PAID
+  PENDING_DELIVERY
+  DELIVERING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+model OrderItem {
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  name        String
+  price       Decimal @db.Decimal(10, 2)
+  quantity    Int
+  image       String  @default("")
+
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model DeliveryStaff {
+  id          Int       @id @default(autoincrement())
+  phone       String    @unique
+  password    String
+  name        String
+  avatar      String    @default("")
+  idCard      String    @default("")
+  status      StaffStatus @default(PENDING)
+  totalOrders Int       @default(0)
+  completedOrders Int   @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orders      Order[]
+  traces      DeliveryTrace[]
+
+  @@map("delivery_staff")
+}
+
+enum StaffStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+model DeliveryTrace {
+  id              Int       @id @default(autoincrement())
+  orderId         Int
+  deliveryId      Int
+  latitude        Decimal   @db.Decimal(10, 6)
+  longitude       Decimal   @db.Decimal(10, 6)
+  status          String
+  description     String    @default("")
+  createdAt       DateTime  @default(now())
+
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  delivery        DeliveryStaff @relation(fields: [deliveryId], references: [id])
+
+  @@map("delivery_traces")
+}
+
+model Evaluation {
+  id          Int     @id @default(autoincrement())
+  orderId     Int     @unique
+  userId      Int
+  score       Int     @default(5)
+  content     String  @default("")
+  images      String  @default("")
+  createdAt   DateTime @default(now())
+
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("evaluations")
+}
+
+model PointLog {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        PointType
+  amount      Int
+  balance     Int
+  description String    @default("")
+  orderId     Int?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("point_logs")
+}
+
+enum PointType {
+  EARN
+  SPEND
+  EXPIRE
+}
