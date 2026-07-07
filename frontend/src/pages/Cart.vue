@@ -96,7 +96,7 @@
         </div>
 
         <div class="mt-4 bg-white rounded-lg shadow p-4">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between mb-4">
             <div class="flex items-center space-x-4">
               <button
                 @click="handleClearCart"
@@ -106,18 +106,61 @@
               </button>
               <span class="text-gray-600">共 {{ totalCount }} 件商品</span>
             </div>
-            <div class="flex items-center space-x-4">
-              <div>
-                <span class="text-gray-600">合计：</span>
-                <span class="text-red-500 font-bold text-xl">¥{{ totalPrice.toFixed(2) }}</span>
-              </div>
-              <button
-                @click="handleCheckout"
-                class="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
-              >
-                结算
-              </button>
+          </div>
+
+          <div v-if="userInfo" class="mb-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-gray-600">当前积分：</span>
+              <span class="text-orange-600 font-bold">{{ userInfo.points }}</span>
             </div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-gray-600">可抵扣金额：</span>
+              <span class="text-green-600 font-bold">¥{{ maxDiscountAmount.toFixed(2) }}</span>
+            </div>
+            <div class="flex items-center space-x-3">
+              <span class="text-gray-600">使用积分抵扣：</span>
+              <input
+                v-model.number="pointUsed"
+                type="number"
+                :min="0"
+                :max="maxPointsToUse"
+                :disabled="!canUsePoints"
+                class="w-24 px-3 py-1 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 disabled:text-gray-400"
+                placeholder="输入积分"
+              />
+              <span class="text-gray-400 text-sm">最多{{ maxPointsToUse }}积分</span>
+              <span v-if="!canUsePoints" class="text-red-500 text-sm">积分不足</span>
+            </div>
+            <div v-if="pointUsed > 0" class="mt-2 text-gray-600">
+              将抵扣：¥{{ pointsDiscount.toFixed(2) }}
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="text-gray-600">商品总额：</span>
+                <span class="text-gray-800">¥{{ totalPrice.toFixed(2) }}</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-gray-600">等级折扣：</span>
+                <span class="text-green-600">-¥{{ discountAmount.toFixed(2) }}</span>
+              </div>
+              <div v-if="pointsDiscount > 0" class="flex items-center space-x-2">
+                <span class="text-gray-600">积分抵扣：</span>
+                <span class="text-orange-600">-¥{{ pointsDiscount.toFixed(2) }}</span>
+              </div>
+              <div class="flex items-center space-x-2 pt-1 border-t border-gray-100">
+                <span class="text-gray-600">实付金额：</span>
+                <span class="text-red-500 font-bold text-xl">¥{{ payAmount.toFixed(2) }}</span>
+              </div>
+            </div>
+            <button
+              @click="handleCheckout"
+              class="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+            >
+              结算
+            </button>
           </div>
         </div>
       </div>
@@ -134,6 +177,7 @@ import { getAddresses, type Address } from '../api/addresses'
 
 const router = useRouter()
 const cartItems = ref<CartItem[]>([])
+const pointUsed = ref(0)
 
 const userInfo = computed(() => {
   const user = localStorage.getItem('user')
@@ -149,6 +193,31 @@ const totalPrice = computed(() => {
     const price = userInfo.value?.level === 'VIP' ? item.product.vipPrice : item.product.salePrice
     return sum + price * item.quantity
   }, 0)
+})
+
+const maxPointsToUse = computed(() => {
+  return Math.floor(totalPrice.value * 0.1 * 100)
+})
+
+const maxDiscountAmount = computed(() => {
+  return Math.min(userInfo.value?.points || 0, maxPointsToUse.value) * 0.01
+})
+
+const canUsePoints = computed(() => {
+  return (userInfo.value?.points || 0) > 0 && maxPointsToUse.value > 0
+})
+
+const discountAmount = computed(() => {
+  return userInfo.value?.level === 'VIP' ? totalPrice.value * 0.05 : 0
+})
+
+const pointsDiscount = computed(() => {
+  const points = Math.min(pointUsed.value, maxPointsToUse.value, userInfo.value?.points || 0)
+  return points * 0.01
+})
+
+const payAmount = computed(() => {
+  return Math.max(0, totalPrice.value - discountAmount.value - pointsDiscount.value)
 })
 
 async function loadCart() {
@@ -205,10 +274,12 @@ async function handleCheckout() {
 
     await createOrder({
       addressId: defaultAddress.id,
-      useCart: true
+      useCart: true,
+      pointUsed: pointUsed.value || undefined
     })
 
     alert('下单成功')
+    pointUsed.value = 0
     await loadCart()
   } catch (error: any) {
     alert(error.message || '下单失败')

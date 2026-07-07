@@ -66,8 +66,19 @@ export async function createOrder(userId: number, input: OrderCreateInputWithCar
   }
 
   const discountAmount = calculateDiscount(totalAmount, user.level)
-  const maxPoints = Math.floor(totalAmount * 100)
-  const pointUsed = Math.min(input.pointUsed || 0, maxPoints, user.points)
+  const maxPoints = Math.floor(totalAmount * 0.1 * 100)
+  const requestedPoints = input.pointUsed || 0
+  
+  if (requestedPoints > 0) {
+    if (requestedPoints > user.points) {
+      throw new Error('积分不足')
+    }
+    if (requestedPoints > maxPoints) {
+      throw new Error(`积分抵扣不能超过订单金额的10%，最多可使用${maxPoints}积分`)
+    }
+  }
+  
+  const pointUsed = Math.min(requestedPoints, maxPoints, user.points)
   const pointsDiscount = pointsToAmount(pointUsed)
   const payAmount = Math.max(0, totalAmount - discountAmount - pointsDiscount)
 
