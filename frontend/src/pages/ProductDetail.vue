@@ -62,8 +62,9 @@
             <p class="text-gray-600 mb-4">{{ product.description }}</p>
 
             <div class="flex items-center justify-between mb-4">
-              <span class="text-gray-600">库存：<span class="text-green-600 font-medium">{{ product.stock }}</span> {{ product.unit }}</span>
-              <span class="text-gray-600">销量：热卖中</span>
+              <span class="text-gray-600">库存：<span :class="product.stock === 0 ? 'text-red-500' : product.stock <= 5 ? 'text-orange-500' : 'text-green-600'" class="font-medium">{{ product.stock }}</span> {{ product.unit }}</span>
+              <span v-if="product.stock === 0" class="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">已售罄</span>
+              <span v-else class="text-gray-600">销量：热卖中</span>
             </div>
 
             <div class="flex items-center space-x-4 mb-6">
@@ -71,7 +72,8 @@
               <div class="flex items-center space-x-2">
                 <button
                   @click="quantity = Math.max(1, quantity - 1)"
-                  class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100"
+                  :disabled="product.stock === 0"
+                  class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -80,7 +82,8 @@
                 <span class="w-12 text-center font-medium">{{ quantity }}</span>
                 <button
                   @click="quantity = Math.min(product.stock, quantity + 1)"
-                  class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100"
+                  :disabled="product.stock === 0 || quantity >= product.stock"
+                  class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -92,18 +95,20 @@
             <div class="flex space-x-4">
               <button
                 @click="handleAddToCart"
-                class="flex-1 py-3 border-2 border-green-600 text-green-600 rounded-lg font-medium hover:bg-green-50 transition-colors flex items-center justify-center"
+                :disabled="product.stock === 0"
+                class="flex-1 py-3 border-2 border-green-600 text-green-600 rounded-lg font-medium hover:bg-green-50 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
-                加入购物车
+                {{ product.stock === 0 ? '已售罄' : '加入购物车' }}
               </button>
               <button
                 @click="handleBuyNow"
-                class="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+                :disabled="product.stock === 0"
+                class="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                立即购买
+                {{ product.stock === 0 ? '已售罄' : '立即购买' }}
               </button>
             </div>
           </div>
@@ -158,7 +163,7 @@ async function loadProduct() {
   
   try {
     product.value = await getProduct(id)
-    quantity.value = 1
+    quantity.value = product.value?.stock === 0 ? 0 : 1
   } catch (error) {
     console.error('加载商品失败:', error)
   }
@@ -182,6 +187,16 @@ async function handleAddToCart() {
 
   if (!product.value) return
 
+  if (product.value.stock === 0) {
+    alert('该商品已售罄')
+    return
+  }
+
+  if (quantity.value > product.value.stock) {
+    alert(`库存不足，最多购买 ${product.value.stock} 件`)
+    return
+  }
+
   try {
     await addCartItem({ productId: product.value.id, quantity: quantity.value })
     await loadCartCount()
@@ -198,6 +213,16 @@ async function handleBuyNow() {
   }
 
   if (!product.value) return
+
+  if (product.value.stock === 0) {
+    alert('该商品已售罄')
+    return
+  }
+
+  if (quantity.value > product.value.stock) {
+    alert(`库存不足，最多购买 ${product.value.stock} 件`)
+    return
+  }
 
   try {
     const addresses: Address[] = await getAddresses()

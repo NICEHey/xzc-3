@@ -14,6 +14,7 @@ export interface CartItem {
     vipPrice: number
     image: string
     unit: string
+    stock: number
     category: { name: string }
   }
 }

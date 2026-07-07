@@ -46,10 +46,6 @@ export async function createOrder(userId: number, input: OrderCreateInputWithCar
     }
 
     const quantity = input.useCart ? item.quantity : item.quantity
-    
-    if (product.stock < quantity) {
-      throw new Error(`商品 ${product.name} 库存不足`)
-    }
 
     const price = user.level === 'VIP' ? product.vipPrice : product.salePrice
     const itemTotal = Number(price) * quantity
@@ -86,10 +82,15 @@ export async function createOrder(userId: number, input: OrderCreateInputWithCar
 
   const transaction = await prisma.$transaction(async (tx) => {
     for (const item of items) {
-      await tx.product.update({
-        where: { id: item.productId },
+      const result = await tx.product.updateMany({
+        where: { id: item.productId, stock: { gte: item.quantity } },
         data: { stock: { decrement: item.quantity } }
       })
+
+      if (result.count === 0) {
+        const product = await tx.product.findUnique({ where: { id: item.productId } })
+        throw new Error(`商品 ${product?.name || item.name} 库存不足`)
+      }
     }
 
     const order = await tx.order.create({

@@ -57,15 +57,23 @@
               </div>
 
               <div class="flex-1 ml-4">
-                <h4 class="font-medium text-gray-800">{{ item.product.name }}</h4>
+                <div class="flex items-center justify-between">
+                  <h4 class="font-medium text-gray-800">{{ item.product.name }}</h4>
+                  <span v-if="item.product.stock === 0" class="px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded-full">已售罄</span>
+                </div>
                 <p class="text-sm text-gray-500">{{ item.product.category?.name }} · {{ item.product.unit }}</p>
+                <div class="flex items-center space-x-2 mt-1">
+                  <span class="text-gray-500 text-sm">库存：</span>
+                  <span :class="item.product.stock <= 5 ? 'text-red-500' : 'text-green-600'" class="text-sm font-medium">{{ item.product.stock }} {{ item.product.unit }}</span>
+                </div>
                 <div class="flex items-center justify-between mt-2">
                   <span class="text-red-500 font-bold">¥{{ item.product.salePrice }}</span>
                   
                   <div class="flex items-center space-x-2">
                     <button
                       @click="handleUpdateQuantity(item.id, item.quantity - 1)"
-                      class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100"
+                      :disabled="item.product.stock === 0"
+                      class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
@@ -74,7 +82,8 @@
                     <span class="w-12 text-center">{{ item.quantity }}</span>
                     <button
                       @click="handleUpdateQuantity(item.id, item.quantity + 1)"
-                      class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100"
+                      :disabled="item.product.stock === 0 || item.quantity >= item.product.stock"
+                      class="w-8 h-8 flex items-center justify-center border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -217,9 +226,10 @@
             </div>
             <button
               @click="handleCheckout"
-              class="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              :disabled="hasSoldOutItems"
+              class="px-6 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              结算
+              {{ hasSoldOutItems ? '存在已售罄商品' : '结算' }}
             </button>
           </div>
         </div>
@@ -282,6 +292,10 @@ const payAmount = computed(() => {
   return Math.max(0, totalPrice.value - discountAmount.value - pointsDiscount.value)
 })
 
+const hasSoldOutItems = computed(() => {
+  return cartItems.value.some(item => item.product.stock === 0)
+})
+
 async function loadCart() {
   try {
     cartItems.value = await getCart()
@@ -307,6 +321,12 @@ async function loadAddresses() {
 async function handleUpdateQuantity(id: number, quantity: number) {
   if (quantity < 1) {
     await handleDeleteItem(id)
+    return
+  }
+
+  const item = cartItems.value.find(i => i.id === id)
+  if (item && quantity > item.product.stock) {
+    alert(`库存不足，最多购买 ${item.product.stock} 件`)
     return
   }
 
