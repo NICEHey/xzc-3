@@ -61,7 +61,7 @@ export async function getProducts(page: number = 1, pageSize: number = 20, categ
 
   const where: any = { status: 'ON_SALE' }
   
-  if (categoryId) {
+  if (categoryId !== undefined && categoryId !== null) {
     where.categoryId = categoryId
   }
   

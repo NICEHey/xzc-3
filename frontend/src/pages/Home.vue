@@ -6,13 +6,24 @@
           <router-link to="/" class="text-2xl font-bold text-green-600">新鲜到家</router-link>
           
           <div class="flex items-center space-x-4">
-            <input
-              v-model="searchKeyword"
-              type="text"
-              placeholder="搜索商品..."
-              class="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 w-64"
-              @keyup.enter="handleSearch"
-            />
+            <div class="relative">
+              <input
+                v-model="searchKeyword"
+                type="text"
+                placeholder="搜索商品..."
+                class="px-4 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 w-64"
+                @keyup.enter="handleSearch"
+              />
+              <button
+                v-if="searchKeyword"
+                @click="clearSearch"
+                class="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
             
             <div v-if="isLoggedIn" class="relative">
               <router-link to="/cart" class="flex items-center text-gray-700 hover:text-green-600">
@@ -48,7 +59,7 @@
             <ul class="space-y-2">
               <li>
                 <button
-                  @click="selectedCategory = undefined"
+                  @click="handleCategoryChange(undefined)"
                   :class="['w-full text-left px-3 py-2 rounded', selectedCategory === undefined ? 'bg-green-100 text-green-700' : 'hover:bg-gray-100']"
                 >
                   全部商品
@@ -56,7 +67,7 @@
               </li>
               <li v-for="cat in categories" :key="cat.id">
                 <button
-                  @click="selectedCategory = cat.id"
+                  @click="handleCategoryChange(cat.id)"
                   :class="['w-full text-left px-3 py-2 rounded', selectedCategory === cat.id ? 'bg-green-100 text-green-700' : 'hover:bg-gray-100']"
                 >
                   {{ cat.icon }} {{ cat.name }}
@@ -169,6 +180,16 @@ async function loadCartCount(): Promise<void> {
 }
 
 function handleSearch() {
+  loadProducts()
+}
+
+function clearSearch() {
+  searchKeyword.value = ''
+  loadProducts()
+}
+
+function handleCategoryChange(categoryId: number | undefined) {
+  selectedCategory.value = categoryId
   loadProducts()
 }
 
