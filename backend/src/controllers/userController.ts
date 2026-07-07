@@ -129,6 +129,22 @@ export async function deleteAddress(req: Request, res: Response) {
   }
 }
 
+export async function setDefaultAddress(req: Request, res: Response) {
+  try {
+    const userId = req.user?.userId
+    const addressId = parseInt(req.params.id)
+
+    if (!userId || isNaN(addressId)) {
+      return error(res, '参数错误', 400)
+    }
+
+    const address = await userService.setDefaultAddress(userId, addressId)
+    success(res, address, '默认地址设置成功')
+  } catch (err: any) {
+    notFound(res, err.message)
+  }
+}
+
 export async function getPointLogs(req: Request, res: Response) {
   try {
     const userId = req.user?.userId

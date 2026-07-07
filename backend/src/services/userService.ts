@@ -103,7 +103,13 @@ export async function updateUser(userId: number, data: Partial<{ nickname: strin
 
 export async function addUserAddress(userId: number, input: UserAddressInput) {
   const transaction = await prisma.$transaction(async (tx) => {
-    if (input.isDefault) {
+    const defaultCount = await tx.userAddress.count({
+      where: { userId, isDefault: true }
+    })
+
+    const shouldSetDefault = input.isDefault || defaultCount === 0
+
+    if (shouldSetDefault) {
       await tx.userAddress.updateMany({
         where: { userId, isDefault: true },
         data: { isDefault: false }
@@ -113,8 +119,27 @@ export async function addUserAddress(userId: number, input: UserAddressInput) {
     const address = await tx.userAddress.create({
       data: {
         userId,
-        ...input
+        ...input,
+        isDefault: shouldSetDefault
       }
+    })
+
+    return address
+  })
+
+  return transaction
+}
+
+export async function setDefaultAddress(userId: number, addressId: number) {
+  const transaction = await prisma.$transaction(async (tx) => {
+    await tx.userAddress.updateMany({
+      where: { userId, isDefault: true },
+      data: { isDefault: false }
+    })
+
+    const address = await tx.userAddress.update({
+      where: { id: addressId, userId },
+      data: { isDefault: true }
     })
 
     return address

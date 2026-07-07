@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
+RUN apk add --no-cache openssl
+
 RUN npx prisma generate
 
 RUN npm run build

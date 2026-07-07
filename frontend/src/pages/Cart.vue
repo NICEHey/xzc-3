@@ -17,6 +17,7 @@
               </router-link>
             </div>
             
+            <router-link to="/addresses" class="px-3 py-1 text-sm text-gray-600 hover:text-green-600">地址管理</router-link>
             <span class="text-gray-600">{{ userInfo?.nickname }}</span>
             <button @click="handleLogout" class="px-3 py-1 text-sm text-red-600 hover:text-red-700">退出</button>
           </div>

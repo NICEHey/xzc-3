@@ -26,6 +26,11 @@ const routes: RouteRecordRaw[] = [
     path: '/product/:id',
     name: 'ProductDetail',
     component: () => import('../pages/ProductDetail.vue')
+  },
+  {
+    path: '/addresses',
+    name: 'AddressList',
+    component: () => import('../pages/AddressList.vue')
   }
 ]
 
@@ -36,7 +41,7 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
-  if (to.name === 'Cart' && !token) {
+  if ((to.name === 'Cart' || to.name === 'AddressList') && !token) {
     next('/login')
   } else {
     next()

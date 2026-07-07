@@ -7,6 +7,7 @@ import {
   getAddresses,
   updateAddress,
   deleteAddress,
+  setDefaultAddress,
   getPointLogs
 } from '../controllers/userController'
 import { authMiddleware } from '../middleware/auth'
@@ -22,6 +23,7 @@ router.post('/addresses', authMiddleware, addAddress)
 router.get('/addresses', authMiddleware, getAddresses)
 router.put('/addresses/:id', authMiddleware, updateAddress)
 router.delete('/addresses/:id', authMiddleware, deleteAddress)
+router.put('/addresses/:id/default', authMiddleware, setDefaultAddress)
 
 router.get('/points/logs', authMiddleware, getPointLogs)
 
