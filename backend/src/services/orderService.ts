@@ -4,7 +4,11 @@ import { generateOrderNo, calculateDiscount, calculatePoints, pointsToAmount } f
 import * as userService from './userService'
 import * as deliveryService from './deliveryService'
 
-export async function createOrder(userId: number, input: OrderCreateInput) {
+interface OrderCreateInputWithCart extends OrderCreateInput {
+  useCart?: boolean
+}
+
+export async function createOrder(userId: number, input: OrderCreateInputWithCart) {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) {
     throw new Error('用户不存在')
@@ -15,27 +19,46 @@ export async function createOrder(userId: number, input: OrderCreateInput) {
     throw new Error('收货地址不存在')
   }
 
+  let cartItems: any[] = []
+  
+  if (input.useCart) {
+    cartItems = await prisma.cartItem.findMany({
+      where: { userId },
+      include: { product: true }
+    })
+
+    if (cartItems.length === 0) {
+      throw new Error('购物车为空')
+    }
+  } else if (!input.items || input.items.length === 0) {
+    throw new Error('请选择商品')
+  }
+
   const items: any[] = []
   let totalAmount = 0
+  const orderItems = input.useCart ? cartItems : input.items
 
-  for (const item of input.items) {
-    const product = await prisma.product.findUnique({ where: { id: item.productId } })
+  for (const item of orderItems) {
+    const product = input.useCart ? item.product : await prisma.product.findUnique({ where: { id: item.productId } })
+    
     if (!product || product.status !== 'ON_SALE') {
-      throw new Error(`商品 ${item.productId} 不存在或已下架`)
+      throw new Error(`商品不存在或已下架`)
     }
 
-    if (product.stock < item.quantity) {
+    const quantity = input.useCart ? item.quantity : item.quantity
+    
+    if (product.stock < quantity) {
       throw new Error(`商品 ${product.name} 库存不足`)
     }
 
     const price = user.level === 'VIP' ? product.vipPrice : product.salePrice
-    const itemTotal = Number(price) * item.quantity
+    const itemTotal = Number(price) * quantity
 
     items.push({
       productId: product.id,
       name: product.name,
       price: price,
-      quantity: item.quantity,
+      quantity,
       image: product.image
     })
 
@@ -51,7 +74,7 @@ export async function createOrder(userId: number, input: OrderCreateInput) {
   const orderNo = generateOrderNo()
 
   const transaction = await prisma.$transaction(async (tx) => {
-    for (const item of input.items) {
+    for (const item of items) {
       await tx.product.update({
         where: { id: item.productId },
         data: { stock: { decrement: item.quantity } }
@@ -79,6 +102,10 @@ export async function createOrder(userId: number, input: OrderCreateInput) {
 
     if (pointUsed > 0) {
       await userService.addPoints(userId, -pointUsed, '订单抵扣', order.id)
+    }
+
+    if (input.useCart) {
+      await tx.cartItem.deleteMany({ where: { userId } })
     }
 
     return order

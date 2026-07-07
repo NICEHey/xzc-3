@@ -11,6 +11,7 @@ import productRoutes from './routes/products'
 import orderRoutes from './routes/orders'
 import deliveryRoutes from './routes/delivery'
 import statsRoutes from './routes/stats'
+import cartRoutes from './routes/cart'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -26,6 +27,7 @@ app.use('/api/products', productRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/delivery', deliveryRoutes)
 app.use('/api/stats', statsRoutes)
+app.use('/api/cart', cartRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ code: 200, message: 'OK', data: { timestamp: new Date().toISOString() } })

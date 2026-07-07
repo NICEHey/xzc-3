@@ -98,6 +98,32 @@ npm run dev
 | `/api/users/addresses/:id` | DELETE | 删除地址 |
 | `/api/users/points/logs` | GET | 获取积分记录 |
 
+### 2.5 购物车接口
+
+| 接口 | 方法 | 描述 |
+|------|------|------|
+| `/api/cart` | POST | 添加商品到购物车 |
+| `/api/cart` | GET | 获取购物车列表 |
+| `/api/cart/count` | GET | 获取购物车商品数量 |
+| `/api/cart/:id` | PUT | 更新购物车商品数量 |
+| `/api/cart/:id` | DELETE | 删除购物车商品 |
+| `/api/cart` | DELETE | 清空购物车 |
+
+**添加购物车请求:**
+```json
+{
+  "productId": 1,
+  "quantity": 2
+}
+```
+
+**更新数量请求:**
+```json
+{
+  "quantity": 3
+}
+```
+
 ### 3. 商品接口
 
 | 接口 | 方法 | 描述 |
@@ -146,13 +172,22 @@ npm run dev
 | `/api/orders/evaluations` | POST | 创建评价 |
 | `/api/orders/evaluations` | GET | 获取评价列表 |
 
-**创建订单请求:**
+**创建订单请求（直接指定商品）:**
 ```json
 {
   "addressId": 1,
   "items": [
     { "productId": 1, "quantity": 2 }
   ],
+  "pointUsed": 100
+}
+```
+
+**创建订单请求（从购物车结算）:**
+```json
+{
+  "addressId": 1,
+  "useCart": true,
   "pointUsed": 100
 }
 ```
